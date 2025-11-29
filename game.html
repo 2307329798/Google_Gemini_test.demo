@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>像素勇者屠龙记 - 轻松版</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #555;
+            background-color: #87CEEB; /* 天空蓝 */
+            box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            image-rendering: pixelated; /* 保持像素清晰 */
+        }
+        .ui-tips {
+            margin-top: 15px;
+            text-align: center;
+            color: #aaa;
+            font-size: 14px;
+        }
+        .key {
+            background: #eee;
+            color: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    
+    <div class="ui-tips">
+        <p><span class="key">←</span> <span class="key">→</span> 移动 | <span class="key">空格</span> 跳跃 | <span class="key">J</span> 攻击 | <span class="key">R</span> 重置</p>
+        <p>提示：向右探索，打败沿途怪物升级宝剑，最终击败霸王龙！</p>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- 游戏配置 ---
+    const GRAVITY = 0.6;
+    const FRICTION = 0.85;
+    const MOVE_SPEED = 0.8; 
+    const MAX_SPEED = 6;
+    const JUMP_FORCE = -14;
+    const FLOOR_Y = 400;
+    const MAP_WIDTH = 3600; // 地图总长度
+
+    // --- 游戏状态 ---
+    let gameState = "playing"; 
+    let cameraX = 0;
+    let particles = [];
+    let texts = []; 
+
+    // --- 输入 ---
+    const keys = { right: false, left: false, up: false, attack: false };
+
+    // --- 玩家对象 ---
+    const player = {
+        x: 100, y: 300, w: 24, h: 40,
+        dx: 0, dy: 0,
+        hp: 20,       // 生命值大幅增加
+        maxHp: 20,
+        grounded: false,
+        facingRight: true,
+        attacking: false,
+        attackTimer: 0,
+        attackCooldown: 0,
+        weaponLevel: 1, 
+        invincible: 0, // 无敌帧
+        
+        getDamage() { return this.weaponLevel * 12; }, // 伤害略微提升
+        
+        getWeaponColor() {
+            const colors = ['#AAA', '#FFD700', '#00FFFF', '#FF00FF'];
+            return colors[this.weaponLevel - 1] || '#FF00FF';
+        },
+
+        reset() {
+            this.x = 100; this.y = 300;
+            this.dx = 0; this.dy = 0;
+            this.hp = 20;
+            this.weaponLevel = 1;
+            this.facingRight = true;
+            this.invincible = 0;
+        }
+    };
+
+    // --- 实体列表 ---
+    let enemies = [];
+    let chests = [];
+    let platforms = [];
+    let portal = null;
+    let boss = null;
+
+    // --- 初始化关卡 ---
+    function initLevel() {
+        platforms = [];
+        enemies = [];
+        chests = [];
+        portal = null;
+        boss = null;
+        cameraX = 0;
+
+        // 生成超长地面
+        platforms.push({x: -200, y: FLOOR_Y, w: MAP_WIDTH + 400, h: 100});
+
+        // 生成随机平台和敌人
+        // 从 x=400 开始，直到 x=2800 (Boss区前)
+        for(let i = 400; i < 2800; i += 180 + Math.random() * 150) {
+            let py = FLOOR_Y - 80 - Math.random() * 100;
+            let pw = 100 + Math.random() * 80;
+            
+            platforms.push({x: i, y: py, w: pw, h: 20});
+
+            // 50% 几率生成敌人 (比之前更多，为了让你爽快刷怪)
+            if(Math.random() < 0.5) {
+                enemies.push(createEnemy(i + 20, py - 30));
+            }
+            // 地面敌人
+            if(Math.random() < 0.4) {
+                enemies.push(createEnemy(i + 50, FLOOR_Y - 30));
+            }
+        }
+
+        // 初始化 Boss
+        boss = {
+            x: 3200, y: FLOOR_Y - 140, w: 140, h: 140, // Boss变大了点
+            hp: 300, maxHp: 300,
+            active: false,
+            dead: false,
+            dx: 0, dy: 0,
+            color: '#2E8B57',
+            flash: 0
+        };
+    }
+
+    function createEnemy(x, y) {
+        return {
+            x: x, y: y, w: 30, h: 30,
+            dx: 2, dy: 0,
+            hp: 30, // 怪物血量
+            patrolStart: x - 60,
+            patrolEnd: x + 60,
+            flash: 0
+        };
+    }
+
+    // --- 监听按键 ---
+    document.addEventListener('keydown', (e) => {
+        if(e.code === 'ArrowRight') keys.right = true;
+        if(e.code === 'ArrowLeft') keys.left = true;
+        if(e.code === 'Space') {
+            if(player.grounded) {
+                player.dy = JUMP_FORCE;
+                player.grounded = false;
+                spawnParticles(player.x + player.w/2, player.y + player.h, 5, '#FFF');
+            }
+        }
+        if(e.code === 'KeyJ') {
+            if(player.attackCooldown <= 0) {
+                player.attacking = true;
+                player.attackTimer = 10; 
+                player.attackCooldown = 20; // 攻速变快了
+            }
+        }
+        if(e.code === 'KeyR') {
+            player.reset();
+            initLevel();
+            gameState = "playing";
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if(e.code === 'ArrowRight') keys.right = false;
+        if(e.code === 'ArrowLeft') keys.left = false;
+    });
+
+    // --- 游戏逻辑 ---
+    function update() {
+        if(gameState === "won" || gameState === "gameover") return;
+
+        // 1. 玩家物理
+        if(keys.right) { player.dx += MOVE_SPEED; player.facingRight = true; }
+        if(keys.left) { player.dx -= MOVE_SPEED; player.facingRight = false; }
+        
+        player.dx *= FRICTION;
+        player.dy += GRAVITY;
+        player.x += player.dx;
+        player.y += player.dy;
+
+        // 限制速度
+        if(Math.abs(player.dx) > MAX_SPEED) player.dx = Math.sign(player.dx) * MAX_SPEED;
+
+        // 2. 地图边界限制 (防止跑出地图左边)
+        if(player.x < 0) { player.x = 0; player.dx = 0; }
+        
+        // 3. 碰撞检测
+        player.grounded = false;
+        platforms.forEach(p => {
+            if(rectIntersect(player.x, player.y, player.w, player.h, p.x, p.y, p.w, p.h)) {
+                if(player.dy > 0 && player.y + player.h - player.dy <= p.y + 12) {
+                    player.y = p.y - player.h;
+                    player.dy = 0;
+                    player.grounded = true;
+                }
+            }
+        });
+
+        // 掉落深渊判定
+        if(player.y > 800) die();
+
+        // 4. 攻击判定
+        if(player.attackCooldown > 0) player.attackCooldown--;
+        if(player.attacking) {
+            player.attackTimer--;
+            let range = 40 + (player.weaponLevel * 15); // 攻击范围更大了
+            let hitX = player.facingRight ? player.x + player.w : player.x - range;
+            let hitY = player.y - 10;
+            let hitW = range;
+            let hitH = player.h + 20;
+
+            // 攻击敌人
+            enemies.forEach((e, index) => {
+                if(rectIntersect(hitX, hitY, hitW, hitH, e.x, e.y, e.w, e.h)) {
+                    if(player.attackTimer === 8) damageEnemy(e, index);
+                }
+            });
+
+            // 攻击 Boss
+            if(!boss.dead && boss.active && rectIntersect(hitX, hitY, hitW, hitH, boss.x, boss.y, boss.w, boss.h)) {
+                 if(player.attackTimer === 8) damageBoss();
+            }
+
+            if(player.attackTimer <= 0) player.attacking = false;
+        }
+
+        // 5. 敌人行为
+        enemies.forEach(e => {
+            if(e.x > e.patrolEnd) e.dx = -2;
+            if(e.x < e.patrolStart) e.dx = 2;
+            e.x += e.dx;
+            if(e.flash > 0) e.flash--;
+
+            // 碰到玩家造成伤害
+            if(!boss.active && checkCollision(player, e)) {
+                takeDamage(2); // 小怪伤害低
+            }
+        });
+
+        // 6. 宝箱
+        chests.forEach((c, i) => {
+            if(checkCollision(player, c)) {
+                chests.splice(i, 1);
+                upgradeWeapon();
+            }
+        });
+
+        // 7. Boss 逻辑
+        if(player.x > 2800 && !boss.dead) boss.active = true;
+        
+        if(boss.active && !boss.dead) {
+            let dir = Math.sign(player.x - boss.x);
+            boss.dx += dir * 0.15;
+            boss.dx *= 0.92;
+            boss.x += boss.dx;
+
+            // Boss AI 跳跃
+            if(boss.y >= FLOOR_Y - boss.h && Math.random() < 0.015) boss.dy = -12;
+            boss.dy += GRAVITY;
+            boss.y += boss.dy;
+            
+            if(boss.y + boss.h > FLOOR_Y) { boss.y = FLOOR_Y - boss.h; boss.dy = 0; }
+
+            if(checkCollision(player, {x:boss.x+20, y:boss.y+20, w:boss.w-40, h:boss.h-40})) {
+                takeDamage(5); // Boss伤害高一点
+            }
+            if(boss.flash > 0) boss.flash--;
+        }
+
+        // 8. 传送门
+        if(portal && checkCollision(player, portal)) {
+            gameState = "won";
+        }
+
+        if(player.invincible > 0) player.invincible--;
+
+        // 9. 智能摄像机跟随
+        // 目标是让玩家在屏幕 1/3 处，给前方留出更多视野
+        let targetCamX = player.x - canvas.width * 0.35; 
+        
+        // 限制摄像机不要超出地图左边
+        if(targetCamX < 0) targetCamX = 0;
+        // 限制摄像机不要超出地图右边 (假设地图宽3600)
+        if(targetCamX > MAP_WIDTH - canvas.width) targetCamX = MAP_WIDTH - canvas.width;
+        
+        // Boss战时尝试稍微锁定视角，但不强制
+        if(boss.active && !boss.dead) {
+             let bossCenter = (boss.x + player.x) / 2 - canvas.width / 2;
+             // targetCamX = bossCenter; // 如果你想让镜头聚焦在两人中间，可以用这个，这里还是跟随玩家为主
+        }
+
+        // 平滑移动 (Lerp)
+        cameraX += (targetCamX - cameraX) * 0.1;
+
+        updateParticles();
+        updateTexts();
+    }
+
+    function checkCollision(r1, r2) {
+        return rectIntersect(r1.x, r1.y, r1.w, r1.h, r2.x, r2.y, r2.w, r2.h);
+    }
+
+    function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
+        return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+    }
+
+    function damageEnemy(enemy, index) {
+        enemy.hp -= player.getDamage();
+        enemy.flash = 10;
+        spawnParticles(enemy.x + enemy.w/2, enemy.y + enemy.h/2, 8, '#FFF');
+        spawnText(player.getDamage(), enemy.x, enemy.y);
+        
+        if(enemy.hp <= 0) {
+            enemies.splice(index, 1);
+            spawnParticles(enemy.x, enemy.y, 20, '#FF4444');
+            // 50% 几率掉宝箱 (很高)
+            if(Math.random() < 0.5) {
+                chests.push({ x: enemy.x, y: FLOOR_Y - 30, w: 30, h: 30 });
+            }
+        }
+    }
+
+    function damageBoss() {
+        if(boss.flash > 0) return;
+        boss.hp -= player.getDamage();
+        boss.flash = 5;
+        spawnText(player.getDamage(), boss.x + boss.w/2, boss.y + 40, "#FF0");
+        
+        if(boss.hp <= 0) {
+            boss.dead = true;
+            boss.active = false;
+            spawnParticles(boss.x + boss.w/2, boss.y + boss.h/2, 100, '#2E8B57');
+            portal = { x: 3400, y: FLOOR_Y - 100, w: 60, h: 100 };
+            texts.push({x: 3400, y: FLOOR_Y - 120, text: "传送门开启!", life: 150, dy: -0.5, color: "gold"});
+        }
+    }
+
+    function takeDamage(amount) {
+        if(player.invincible > 0) return;
+        player.hp -= amount;
+        if(player.hp < 0) player.hp = 0;
+        player.invincible = 60; // 1秒无敌
+        spawnParticles(player.x, player.y, 10, '#FF0000');
+        spawnText("-" + amount, player.x, player.y - 20, "red");
+        
+        // 击退效果
+        player.dy = -6;
+        player.dx = player.facingRight ? -8 : 8;
+
+        if(player.hp <= 0) die();
+    }
+
+    function upgradeWeapon() {
+        if(player.weaponLevel < 4) {
+            player.weaponLevel++;
+            spawnText("武器升级!", player.x, player.y - 40, "#FFD700");
+        } 
+        // 捡箱子总是回血
+        player.hp = Math.min(player.hp + 5, player.maxHp);
+        spawnText("+HP", player.x + 20, player.y - 40, "#0F0");
+    }
+
+    function die() {
+        gameState = "gameover";
+    }
+
+    // --- 特效 ---
+    function spawnParticles(x, y, count, color) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y,
+                dx: (Math.random() - 0.5) * 10,
+                dy: (Math.random() - 0.5) * 10,
+                life: 30 + Math.random() * 20,
+                color: color
+            });
+        }
+    }
+
+    function spawnText(str, x, y, color = "#FFF") {
+        texts.push({ x: x, y: y, text: str, life: 50, dy: -1.5, color: color });
+    }
+
+    function updateParticles() {
+        for(let i=particles.length-1; i>=0; i--) {
+            particles[i].x += particles[i].dx;
+            particles[i].y += particles[i].dy;
+            particles[i].life--;
+            if(particles[i].life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function updateTexts() {
+        for(let i=texts.length-1; i>=0; i--) {
+            texts[i].y += texts[i].dy;
+            texts[i].life--;
+            if(texts[i].life <= 0) texts.splice(i, 1);
+        }
+    }
+
+    // --- 绘图 ---
+    function draw() {
+        // 背景
+        ctx.fillStyle = '#202020';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0); // 使用整数坐标防止画面抖动
+
+        // 天空
+        ctx.fillStyle = '#87CEEB';
+        ctx.fillRect(Math.floor(cameraX), 0, canvas.width, canvas.height);
+
+        // 装饰背景云 (跟随相机稍微移动，制造视差感)
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(200 + cameraX * 0.5, 100, 120, 40);
+        ctx.fillRect(600 + cameraX * 0.6, 150, 180, 50);
+        ctx.fillRect(1200 + cameraX * 0.5, 80, 200, 60);
+
+        // 平台
+        platforms.forEach(p => {
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = '#66BB6A'; // 亮绿色草皮
+            ctx.fillRect(p.x, p.y, p.w, 6);
+        });
+
+        // 传送门
+        if(portal) {
+            ctx.fillStyle = `rgba(148, 0, 211, ${Math.random() * 0.5 + 0.5})`;
+            ctx.fillRect(portal.x, portal.y, portal.w, portal.h);
+            ctx.strokeStyle = '#FFF';
+            ctx.strokeRect(portal.x, portal.y, portal.w, portal.h);
+        }
+
+        // 宝箱
+        chests.forEach(c => {
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(c.x, c.y, c.w, c.h);
+            // 宝箱带子
+            ctx.fillStyle = '#B22222';
+            ctx.fillRect(c.x + 12, c.y, 6, c.h);
+        });
+
+        // 敌人
+        enemies.forEach(e => {
+            ctx.fillStyle = e.flash > 0 ? '#FFF' : '#FF4444';
+            ctx.fillRect(e.x, e.y, e.w, e.h);
+            // 简单的愤怒表情
+            ctx.fillStyle = '#000';
+            ctx.fillRect(e.x + 5, e.y + 8, 8, 4);
+            ctx.fillRect(e.x + 18, e.y + 8, 8, 4);
+        });
+
+        // Boss
+        if(boss && !boss.dead) {
+            let bx = boss.x;
+            let by = boss.y;
+            ctx.fillStyle = boss.flash > 0 ? '#FFF' : boss.color;
+            ctx.fillRect(bx, by, boss.w, boss.h);
+            // 眼睛
+            ctx.fillStyle = 'yellow';
+            ctx.fillRect(bx - 10, by - 10, 20, 20);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(bx - 5, by - 5, 5, 5);
+        }
+
+        // 玩家
+        if(player.invincible % 8 < 4) { // 受伤闪烁
+            // 身体
+            ctx.fillStyle = '#4169E1'; // 皇家蓝
+            ctx.fillRect(player.x, player.y + 10, player.w, 20);
+            // 头
+            ctx.fillStyle = '#FFCCAA';
+            ctx.fillRect(player.x + 2, player.y - 2, 20, 14);
+            // 腿
+            ctx.fillStyle = '#333';
+            ctx.fillRect(player.x + 4, player.y + 30, 6, 10);
+            ctx.fillRect(player.x + 14, player.y + 30, 6, 10);
+
+            // 武器绘制
+            ctx.save();
+            ctx.translate(player.x + player.w/2, player.y + 18);
+            if(!player.facingRight) ctx.scale(-1, 1);
+            if(player.attacking) ctx.rotate(Math.PI / 3);
+
+            ctx.fillStyle = player.getWeaponColor();
+            let swordLen = 25 + player.weaponLevel * 6;
+            ctx.fillRect(0, -3, swordLen, 6);
+            ctx.fillStyle = '#8B4513'; // 剑柄
+            ctx.fillRect(-6, -2, 6, 4);
+            ctx.restore();
+        }
+
+        // 粒子
+        particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 4, 4);
+        });
+
+        // 浮动文字
+        ctx.font = 'bold 16px Courier New';
+        texts.forEach(t => {
+            ctx.fillStyle = t.color;
+            ctx.fillText(t.text, t.x, t.y);
+        });
+
+        ctx.restore();
+
+        // --- UI 层 (固定在屏幕上的元素) ---
+
+        // 1. 玩家血条 (左上角)
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(20, 20, 220, 40); // 背景板
+        
+        ctx.fillStyle = '#FFF';
+        ctx.font = '16px Courier New';
+        ctx.fillText("HP", 30, 45);
+        
+        // 血条槽
+        ctx.fillStyle = '#333';
+        ctx.fillRect(60, 28, 160, 24);
+        // 当前血量 (绿色 -> 红色)
+        let hpPct = player.hp / player.maxHp;
+        ctx.fillStyle = hpPct > 0.5 ? '#32CD32' : '#FF4500';
+        ctx.fillRect(62, 30, 156 * hpPct, 20);
+
+        // 武器信息
+        let wName = ["无", "铁剑", "黄金剑", "钻石剑", "弑神者"][player.weaponLevel];
+        ctx.fillStyle = player.getWeaponColor();
+        ctx.font = 'bold 16px Courier New';
+        ctx.fillText("武器: " + wName, 20, 80);
+
+
+        // 2. Boss 血条 (只在 Boss 激活时显示)
+        if(boss.active && !boss.dead) {
+            let barW = 400;
+            let barX = (canvas.width - barW) / 2;
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(barX - 4, 380, barW + 8, 30);
+            
+            ctx.fillStyle = '#F00';
+            ctx.fillRect(barX, 384, barW * (boss.hp / boss.maxHp), 22);
+            
+            ctx.fillStyle = '#FFF';
+            ctx.font = '20px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText("BOSS: 史前霸王龙", canvas.width/2, 370);
+            ctx.textAlign = 'left';
+        }
+
+        // 3. 游戏结束/胜利
+        if (gameState === "won") {
+            drawOverlay("任务完成!", "恭喜你击败了Boss！", "#FFD700");
+        } else if (gameState === "gameover") {
+            drawOverlay("游戏结束", "不要放弃，按 R 重来！", "#FF4444");
+        }
+    }
+
+    function drawOverlay(title, sub, color) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = color;
+        ctx.font = '50px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText(title, canvas.width/2, canvas.height/2 - 20);
+        ctx.fillStyle = '#FFF';
+        ctx.font = '20px Courier New';
+        ctx.fillText(sub, canvas.width/2, canvas.height/2 + 30);
+        ctx.textAlign = 'left';
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    initLevel();
+    loop();
+
+</script>
+</body>
+</html>

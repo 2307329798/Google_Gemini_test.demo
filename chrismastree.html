@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magical Christmas Tree</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; position: relative; z-index: 1; }
+        
+        #video-input {
+            position: absolute; top: 20px; left: 20px;
+            width: 160px; height: 120px;
+            border-radius: 8px; opacity: 0.3;
+            transform: scaleX(-1); z-index: 50;
+            border: 1px solid rgba(255,255,255,0.2);
+            display: none; 
+        }
+
+        #ui-layer {
+            position: absolute; bottom: 40px; left: 50%;
+            transform: translateX(-50%); z-index: 20;
+            text-align: center; pointer-events: none; width: 100%;
+        }
+
+        .hud-text {
+            color: rgba(255,255,255,0.8); font-size: 14px; letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 24px; border-radius: 20px;
+            display: inline-block;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* 祝福语容器 */
+        #greeting-container {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            z-index: 10;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 1.2s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性过渡 */
+            text-align: center;
+        }
+
+        .greeting-text {
+            font-family: "Microsoft YaHei", sans-serif;
+            font-size: 90px;
+            font-weight: 900;
+            color: #fff;
+            /* 多层发光阴影 */
+            text-shadow: 
+                0 0 10px #FFD700,
+                0 0 30px #FFD700,
+                0 0 60px #FF4500;
+            letter-spacing: 8px;
+            animation: floatText 4s ease-in-out infinite;
+        }
+
+        .sub-text {
+            font-size: 20px; color: #FFE082; margin-top: 5px; opacity: 0.9;
+            letter-spacing: 4px; font-weight: 300; text-transform: uppercase;
+        }
+
+        @keyframes floatText {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        #loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: white; font-size: 16px; z-index: 50; text-align: center;
+        }
+    </style>
+    <script src="https://unpkg.com/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="loading">正在挂起星星...<br><span style="font-size:12px; opacity:0.6">请允许摄像头访问</span></div>
+    
+    <div id="greeting-container">
+        <div class="greeting-text">含含圣诞快乐</div>
+        <div class="sub-text">Merry Christmas</div>
+    </div>
+
+    <video id="video-input" playsinline></video>
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div class="hud-text">
+            👋 单手：控制粒子 | 🙌 双手：有惊喜哦
+        </div>
+    </div>
+
+    <script type="module">
+        // ==========================================
+        // 1. 全局配置
+        // ==========================================
+        const state = {
+            targetDispersion: 0.0,
+            currentDispersion: 0.0,
+            targetScale: 1.0,
+            currentScale: 1.0,
+            isEggActive: 0.0,
+            currentEggFactor: 0.0
+        };
+
+        const PALETTE = {
+            greenBase: new THREE.Color('#1a472a'),
+            greenLight: new THREE.Color('#43a047'),
+            snow: new THREE.Color('#e1f5fe'),
+            trunk: new THREE.Color('#4e342e'),
+            star: new THREE.Color('#ffc107'),
+            ribbon: new THREE.Color('#fff9c4'),
+            ornaments: [
+                new THREE.Color('#f44336'), 
+                new THREE.Color('#ffa726'), 
+                new THREE.Color('#29b6f6')
+            ]
+        };
+
+        // ==========================================
+        // 2. Three.js 场景
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#050509'); // 极深的蓝黑色
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(0, 0, 50);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // ==========================================
+        // 3. 模型构建 (保持原有点阵结构)
+        // ==========================================
+        function createMagicTree(count) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            const colors = [];
+            const sizes = [];
+            const randoms = [];
+            const sphereDirs = []; 
+
+            const center = new THREE.Vector3(0, 2, 0);
+
+            const addParticle = (x, y, z, color, sizeBase) => {
+                positions.push(x, y, z);
+                colors.push(color.r, color.g, color.b);
+                sizes.push(sizeBase * (0.8 + Math.random() * 0.6));
+                randoms.push(Math.random());
+
+                // 预计算归一化的球体方向向量
+                const dir = new THREE.Vector3(x, y, z).sub(center).normalize();
+                sphereDirs.push(dir.x, dir.y, dir.z);
+            };
+
+            // 1. 树干
+            for (let i = 0; i < count * 0.08; i++) {
+                const r = Math.random() * 1.8; 
+                const theta = Math.random() * Math.PI * 2;
+                const h = Math.random() * 8 - 14;
+                const rSurf = Math.sqrt(Math.random()) * 2.0 + 0.5;
+                addParticle(rSurf * Math.cos(theta), h, rSurf * Math.sin(theta), PALETTE.trunk, 1.2);
+            }
+
+            // 2. 树叶 (分层)
+            const layers = 4;
+            const layerHeight = 6.5;
+            const startY = -8;
+            for (let l = 0; l < layers; l++) {
+                const layerBaseY = startY + l * 4.5;
+                const bottomR = 11 - l * 2.2;
+                const topR = 3.5 - l * 0.8;
+                const pCount = (count * 0.75) / layers;
+                
+                for (let i = 0; i < pCount; i++) {
+                    const hRatio = Math.random();
+                    const y = layerBaseY + hRatio * layerHeight;
+                    const currentR = bottomR * (1.0 - hRatio) + topR * hRatio * 0.6;
+                    const r = Math.sqrt(Math.random() * 0.3 + 0.7) * currentR;
+                    const theta = Math.random() * Math.PI * 2;
+                    
+                    let col = PALETTE.greenBase;
+                    let size = 2.0;
+
+                    const isEdge = r > currentR * 0.9;
+                    const isTop = hRatio > 0.9;
+                    
+                    if ((isEdge && Math.random() > 0.7) || (isTop && Math.random() > 0.5)) {
+                        col = PALETTE.snow;
+                        size = 1.6;
+                    } else if (Math.random() > 0.75) {
+                        col = PALETTE.greenLight;
+                    }
+                    
+                    if (isEdge && Math.random() > 0.98) {
+                        col = PALETTE.ornaments[Math.floor(Math.random() * PALETTE.ornaments.length)];
+                        size = 4.0;
+                    }
+
+                    addParticle(r * Math.cos(theta), y, r * Math.sin(theta), col, size);
+                }
+            }
+
+            // 3. 丝带
+            for (let i = 0; i < 800; i++) {
+                const t = i / 800;
+                const angle = t * Math.PI * 9;
+                const radius = 3 + t * 9;
+                const h = 13 - t * 23;
+                const jx = (Math.random()-0.5), jy = (Math.random()-0.5);
+                addParticle(
+                    Math.cos(angle)*radius + jx, 
+                    h + jy, 
+                    Math.sin(angle)*radius, 
+                    PALETTE.ribbon, 
+                    1.7
+                );
+            }
+
+            // 4. 星星
+            for(let i=0; i<300; i++) {
+                const r = 1.6 * Math.cbrt(Math.random()); 
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                addParticle(
+                    r * Math.sin(phi) * Math.cos(theta),
+                    r * Math.sin(phi) * Math.sin(theta) + 14.5,
+                    r * Math.cos(phi),
+                    PALETTE.star, 
+                    2.2
+                );
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+            geometry.setAttribute('sphereDir', new THREE.Float32BufferAttribute(sphereDirs, 3));
+            geometry.setAttribute('random', new THREE.Float32BufferAttribute(randoms, 1));
+            geometry.setAttribute('originalPos', new THREE.Float32BufferAttribute(positions, 3));
+
+            return geometry;
+        }
+
+        // ==========================================
+        // 4. Shader (核心：环绕与闪烁)
+        // ==========================================
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uScale: { value: 1.0 },
+                uDispersion: { value: 0.0 }, 
+                uEggFactor: { value: 0.0 }, 
+            },
+            vertexShader: `
+                uniform float uTime;
+                uniform float uScale;
+                uniform float uDispersion;
+                uniform float uEggFactor;
+                
+                attribute float size;
+                attribute vec3 color;
+                attribute vec3 originalPos;
+                attribute vec3 sphereDir;
+                attribute float random;
+
+                varying vec3 vColor;
+                varying float vFlash; // 传递给 Fragment 的闪烁强度
+
+                // 2D 旋转矩阵
+                mat2 rotate2d(float angle) {
+                    return mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+                }
+
+                void main() {
+                    // 1. 基础呼吸位移 (静止时也有微弱生命感)
+                    vec3 pos = originalPos;
+                    pos.y += sin(uTime * 2.0 + random * 10.0) * 0.05;
+
+                    // 2. 形态计算 (树 -> 球)
+                    vec3 spherePos = sphereDir * (15.0 + random * 6.0); 
+                    float mixRatio = clamp(uDispersion * (0.6 + 0.4 * uEggFactor), 0.0, 1.0);
+                    vec3 targetPos = mix(originalPos, spherePos, mixRatio);
+                    
+                    // 3. 扩散位移 (炸开)
+                    float flyDist = uDispersion * (8.0 + random * 12.0);
+                    targetPos += sphereDir * flyDist;
+
+                    // 4. === 核心：缓慢环绕移动 (Orbit) ===
+                    // 只有当 uDispersion > 0 时才生效
+                    if (uDispersion > 0.05) {
+                        // 基础速度 + 随机差异
+                        // 彩蛋模式下(uEggFactor=1)旋转更明显
+                        float orbitSpeed = (0.2 + 0.3 * uEggFactor) * uDispersion; 
+                        
+                        // 根据高度不同，旋转方向可以稍微错开，制造星云感
+                        float angle = uTime * orbitSpeed * (0.8 + 0.4 * random);
+                        
+                        // 绕 Y 轴旋转 (水平环绕)
+                        targetPos.xz = rotate2d(angle) * targetPos.xz;
+
+                        // 同时也稍微加一点垂直方向的浮动，像萤火虫
+                        targetPos.y += sin(uTime * 1.5 + random * 100.0) * uDispersion * 2.0;
+                    }
+
+                    // 5. 彩蛋避让文字 (Void Effect)
+                    if (uEggFactor > 0.1) {
+                        float dist = length(targetPos);
+                        float minRadius = 13.0 * uEggFactor;
+                        if (dist < minRadius) {
+                            targetPos = normalize(targetPos) * minRadius;
+                        }
+                    }
+
+                    // 应用整体缩放
+                    targetPos *= uScale;
+
+                    vec4 mvPosition = modelViewMatrix * vec4(targetPos, 1.0);
+                    gl_PointSize = size * (450.0 / -mvPosition.z) * uScale;
+                    gl_Position = projectionMatrix * mvPosition;
+
+                    // === 核心：闪烁值计算 (Twinkle) ===
+                    vColor = color;
+                    
+                    // 基础：不闪烁
+                    vFlash = 1.0; 
+
+                    // 当粒子散开时，开始闪烁
+                    if (uDispersion > 0.1) {
+                        // 频率：3.0，相位：随机
+                        float flashWave = sin(uTime * 4.0 + random * 50.0); // -1 ~ 1
+                        // 映射到 0.6 ~ 1.4 (变暗和变亮)
+                        float flashIntensity = 1.0 + flashWave * 0.4 * uDispersion;
+                        vFlash = flashIntensity;
+                    }
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vColor;
+                varying float vFlash; // 接收闪烁强度
+
+                void main() {
+                    vec2 center = gl_PointCoord - 0.5;
+                    float dist = length(center);
+                    
+                    if (dist > 0.45) discard;
+
+                    // 将闪烁强度应用到颜色上
+                    // vFlash > 1.0 变亮 (趋向白色)，< 1.0 变暗
+                    vec3 finalColor = vColor * vFlash;
+
+                    // 简单的色调映射，防止过曝时颜色怪异，保留漫画感
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+            `,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true
+        });
+
+        const points = new THREE.Points(createMagicTree(13000), material);
+        scene.add(points);
+
+        // ==========================================
+        // 5. 手势交互
+        // ==========================================
+        const videoElement = document.getElementById('video-input');
+        const greetingDiv = document.getElementById('greeting-container');
+
+        function getHandOpenness(landmarks) {
+            const wrist = landmarks[0];
+            const tips = [8, 12, 16, 20];
+            let avgDist = 0;
+            tips.forEach(idx => {
+                const tip = landmarks[idx];
+                avgDist += Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+            });
+            avgDist /= 4;
+            return Math.max(0, Math.min(1, (avgDist - 0.15) / 0.25));
+        }
+
+        function onResults(results) {
+            document.getElementById('loading').style.display = 'none';
+
+            let handsFound = 0;
+            let totalOpenness = 0;
+
+            if (results.multiHandLandmarks) {
+                handsFound = results.multiHandLandmarks.length;
+                results.multiHandLandmarks.forEach(l => totalOpenness += getHandOpenness(l));
+            }
+
+            // 逻辑处理
+            let isEgg = false;
+            let rawDispersion = 0;
+
+            if (handsFound > 0) {
+                rawDispersion = totalOpenness / handsFound;
+            }
+
+            // 双手彩蛋判定
+            if (handsFound === 2) {
+                const open1 = getHandOpenness(results.multiHandLandmarks[0]);
+                const open2 = getHandOpenness(results.multiHandLandmarks[1]);
+                
+                // 双手都张开触发
+                if (open1 > 0.65 && open2 > 0.65) {
+                    isEgg = true;
+                }
+
+                const h1 = results.multiHandLandmarks[0][0];
+                const h2 = results.multiHandLandmarks[1][0];
+                const dist = Math.hypot(h1.x - h2.x, h1.y - h2.y);
+                
+                let sRaw = (dist - 0.1) * 2.5;
+                state.targetScale = Math.max(0.6, Math.min(2.0, sRaw + 0.6));
+            } else {
+                state.targetScale = 1.0;
+            }
+
+            if (isEgg) {
+                state.isEggActive = 1.0;
+                state.targetDispersion = 1.6; // 炸开范围更大
+            } else {
+                state.isEggActive = 0.0;
+                state.targetDispersion = rawDispersion * 0.9;
+            }
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 640, height: 480
+        });
+        cameraUtils.start();
+
+        // ==========================================
+        // 6. 动画 Loop
+        // ==========================================
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            // 阻尼处理
+            const damp = 3.5 * dt;
+            state.currentScale += (state.targetScale - state.currentScale) * damp;
+            state.currentDispersion += (state.targetDispersion - state.currentDispersion) * damp;
+            
+            // 彩蛋因子平滑 (慢一点)
+            state.currentEggFactor += (state.isEggActive - state.currentEggFactor) * (2.0 * dt);
+
+            // UI 控制
+            if (state.currentEggFactor > 0.5) {
+                greetingDiv.style.opacity = '1';
+                greetingDiv.style.transform = 'translate(-50%, -50%) scale(1)';
+            } else {
+                greetingDiv.style.opacity = '0';
+                greetingDiv.style.transform = 'translate(-50%, -50%) scale(0.6)';
+            }
+
+            // 更新 Uniforms
+            material.uniforms.uTime.value = clock.getElapsedTime();
+            material.uniforms.uScale.value = state.currentScale;
+            material.uniforms.uDispersion.value = state.currentDispersion;
+            material.uniforms.uEggFactor.value = state.currentEggFactor;
+
+            // 整体展示旋转 (彩蛋时因为粒子自己在转，整体旋转就可以停下来或者变慢)
+            const baseRotSpeed = 0.15 * (1.0 - state.currentEggFactor * 0.9);
+            points.rotation.y += baseRotSpeed * dt; 
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
