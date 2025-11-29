@@ -3,289 +3,200 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极速刷词</title>
+    <title>四级高频600词 | 无尽模式</title>
     <style>
-        :root {
-            --primary: #07c160;
-            --wrong: #fa5151;
-            --bg: #f5f7fa;
-            --card-bg: #ffffff;
-            --text: #333;
-        }
-        body {
-            margin: 0; padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* 顶部回顾通知栏 */
-        #review-bar {
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            padding: 12px 20px;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            transform: translateY(-100%);
-            transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
-            z-index: 100;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .review-correct { background-color: #d1f7de; color: #006622; }
-        .review-wrong { background-color: #ffe6e6; color: #a80000; }
-
-        /* 主区域 */
-        .container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 20px;
-            padding-top: 60px; /* 给通知栏留空间 */
-        }
-
-        .word-card {
-            background: var(--card-bg);
-            border-radius: 20px;
-            padding: 50px 20px;
-            text-align: center;
-            margin-bottom: 40px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
-            transition: transform 0.2s;
-        }
-
-        .word-text {
-            font-size: 42px;
-            font-weight: 800;
-            color: var(--text);
-            margin-bottom: 5px;
-        }
+        :root { --primary: #07c160; --wrong: #fa5151; --bg: #f5f7fa; --card: #fff; --text: #333; }
+        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: var(--bg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; user-select: none; }
         
-        .phonetic {
-            color: #888;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-        }
-
-        /* 选项布局 */
-        .options-box {
-            display: grid;
-            gap: 15px;
-        }
-
-        .option-btn {
-            background: #fff;
-            border: none;
-            padding: 20px;
-            font-size: 17px;
-            color: #444;
-            border-radius: 12px;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
-            transition: all 0.1s;
-            text-align: left;
-            position: relative;
-            font-weight: 500;
-        }
-
-        .option-btn:active { background: #f0f0f0; transform: scale(0.98); }
-
-        /* 状态样式 */
-        .btn-correct {
-            background: #07c160 !important;
-            color: white !important;
-            box-shadow: 0 4px 12px rgba(7, 193, 96, 0.4);
-        }
-        .btn-wrong {
-            background: #fa5151 !important;
-            color: white !important;
-            animation: shake 0.4s;
-        }
+        /* 顶部状态栏 */
+        .status-bar { padding: 15px 20px; display: flex; justify-content: space-between; color: #888; font-size: 13px; font-weight: 500; }
         
-        /* 禁用点击，防止切题时狂点 */
-        .disabled-click { pointer-events: none; }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20% { transform: translateX(-8px); }
-            60% { transform: translateX(8px); }
+        /* 顶部回顾条 */
+        #review-banner {
+            position: fixed; top: 0; left: 0; right: 0; padding: 12px;
+            text-align: center; font-size: 14px; font-weight: bold;
+            transform: translateY(-100%); transition: transform 0.3s;
+            z-index: 99; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        .banner-ok { background: #d4f7dc; color: #006622; }
+        .banner-err { background: #ffe6e6; color: #a80000; }
+
+        /* 卡片区域 */
+        .container { flex: 1; display: flex; flex-direction: column; padding: 20px; justify-content: center; padding-bottom: 40px; }
+        .card { background: var(--card); border-radius: 20px; padding: 40px 20px; text-align: center; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+        .word { font-size: 40px; font-weight: 800; color: var(--text); margin-bottom: 8px; line-height: 1.1; }
+        .phonetic { color: #999; font-size: 14px; font-family: Arial; }
+
+        /* 选项 */
+        .options { display: grid; gap: 12px; }
+        .btn { background: #fff; border: 1px solid rgba(0,0,0,0.05); padding: 18px; border-radius: 12px; font-size: 16px; color: #444; text-align: left; transition: all 0.1s; cursor: pointer; position: relative; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .btn:active { background: #f2f2f2; transform: scale(0.98); }
+        
+        /* 状态颜色 */
+        .btn-ok { background: var(--primary) !important; color: #fff !important; border-color: var(--primary); }
+        .btn-err { background: var(--wrong) !important; color: #fff !important; border-color: var(--wrong); animation: shake 0.4s; }
+        .disabled { pointer-events: none; }
+
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 60%{transform:translateX(6px)} }
     </style>
 </head>
 <body>
 
-    <!-- 顶部回顾条 -->
-    <div id="review-bar"></div>
-
-    <div class="container">
-        <div class="word-card">
-            <div class="word-text" id="word">Ready?</div>
-            <div class="phonetic" id="hint">点击下方选项开始</div>
-        </div>
-
-        <div class="options-box" id="options">
-            <!-- 选项将在这里生成 -->
-        </div>
+    <div id="review-banner"></div>
+    
+    <div class="status-bar">
+        <span>本次连续: <b id="streak" style="color:var(--primary)">0</b></span>
+        <span>循环池: 600词</span>
     </div>
 
-    <script>
-        // ================= 数据区 =================
-        // 依然是你的Day1部分数据，你可以继续填充
-        const fullDatabase = [
-            { w: "mature", m: "成熟的；深思熟虑的" },
-            { w: "supreme", m: "至高无上的" },
-            { w: "likely", m: "可能的" },
-            { w: "interaction", m: "互动；交互" },
-            { w: "construction", m: "建设；建造" },
-            { w: "previous", m: "以前的；先前的" },
-            { w: "material", m: "材料；物质" },
-            { w: "gym", m: "健身房" },
-            { w: "responsible", m: "负责的" },
-            { w: "rare", m: "稀有的；罕见的" },
-            { w: "contact", m: "接触；联系" },
-            { w: "tend", m: "倾向于；易于" },
-            { w: "current", m: "当前的；流行的" },
-            { w: "individual", m: "个人；个体" },
-            { w: "factor", m: "因素" },
-            { w: "action", m: "行动；行为" },
-            { w: "access", m: "访问；通道" },
-            { w: "career", m: "职业；生涯" },
-            { w: "offer", m: "提供；提议" },
-            { w: "budget", m: "预算" }
-        ];
+    <div class="container">
+        <div class="card">
+            <div class="word" id="q-word">Loading...</div>
+            <div class="phonetic">请选择正确释义</div>
+        </div>
+        <div class="options" id="opt-box"></div>
+    </div>
 
-        // ================= 逻辑区 =================
+<script>
+// ==========================================
+// 600词完整数据库 (已压缩体积)
+// 格式: [单词, 释义]
+// ==========================================
+const RAW_DATA = [
+    // DAY 1
+    ["mature","a. 成熟的；深思熟虑的"],["supreme","a. 至高无上的"],["likely","a. 可能的"],["interaction","n. 互动；交互"],["construction","n. 建设；建造"],["previous","a. 以前的；先前的"],["material","n. 材料；物质"],["gym","n. 健身房"],["responsible","a. 负责的"],["rare","a. 稀有的；罕见的"],["contact","n. 接触；联系"],["tend","v. 倾向于；易于"],["current","a. 当前的；流行的"],["individual","n. 个人；个体"],["factor","n. 因素"],["action","n. 行动；行为"],["access","n. 访问；通道"],["career","n. 职业；生涯"],["offer","v. 提供；提议"],["budget","n. 预算"],["whether","conj. 是否"],["challenge","n. 挑战"],["employer","n. 雇主"],["register","v. 注册；登记"],["benefit","n. 利益；好处"],["rather","adv. 相当；宁可"],["expand","v. 扩展；扩大"],["prime","a. 主要的；首要的"],["interview","n. 面试；访谈"],["policy","n. 政策；方针"],["rate","n. 比率；速率"],["imply","v. 暗示；意味"],["inevitable","a. 不可避免的"],["saving","n. 储蓄；节省"],["yield","v. 产生；屈服"],["connect","v. 连接；联系"],["exceptional","a. 杰出的；例外的"],["coach","n. 教练；辅导员"],["scholarship","n. 奖学金"],["campus","n. 校园"],["superficial","a. 表面的；肤浅的"],["feasible","a. 可行的"],["acknowledge","v. 承认；认可"],["vote","v. 投票；表决"],["cash","n. 现金"],["outer","a. 外部的"],["admission","n. 录取；允许进入"],["natural","a. 自然的"],["simply","adv. 简单地；仅仅"],["patience","n. 耐心"],
+    // DAY 2
+    ["essential","a. 必要的；基本的"],["oxygen","n. 氧气"],["lunar","a. 阴历的，月球的"],["underline","v. 强调；在…下划线"],["intelligence","n. 智力；智慧"],["impose","v. 强加；施加"],["performance","n. 表现；性能"],["internal","a. 内部的"],["semester","n. 学期"],["pose","v. 摆姿势；提出"],["frustrate","v. 挫败；使沮丧"],["principal","a. 主要的；校长"],["volcano","n. 火山"],["diverse","a. 多样的"],["typical","a. 典型的"],["initiative","n. 主动性；倡议"],["assumption","n. 假设；设想"],["effective","a. 有效的"],["tuition","n. 学费；教学"],["revenue","n. 收入；税收"],["risk","n. 风险；危险"],["bias","n. 偏见；偏向"],["supervise","v. 监督；管理"],["employee","n. 雇员；员工"],["potential","a. 潜在的"],["principle","n. 原则；原理"],["anyway","adv. 无论如何"],["decline","v. 下降；拒绝"],["privacy","n. 隐私"],["brand","n. 品牌"],["truly","adv. 真正地"],["combine","v. 结合"],["ignorance","n. 无知"],["package","n. 包裹；包装"],["private","a. 私人的；秘密的"],["overwhelm","v. 制服；压倒"],["growth","n. 增长；发展"],["comprehension","n. 理解(力)"],["sympathy","n. 同情"],["delicate","a. 精致的；微妙的"],["calendar","n. 日历"],["vanish","v. 消失；灭绝"],["select","v. 选择；挑选"],["specific","a. 特定的；具体的"],["realistic","a. 现实的"],["candidate","n. 候选人"],["perceive","v. 感知；察觉"],["embarrass","v. 使尴尬"],["council","n. 委员会"],["loan","n. 贷款；借款"],
+    // DAY 3
+    ["value","n. 价值；重要性"],["effort","n. 努力；尽力"],["consider","v. 考虑；认为"],["response","n. 回应；答复"],["experience","n. 经验；经历"],["helpful","a. 有帮助的"],["community","n. 社区；团体"],["professional","a. 专业的"],["concern","n. 关心；担忧"],["achievement","n. 成就；完成"],["increase","v. 增加；提高"],["stress","n. 压力；紧张"],["whatever","pron. 无论什么"],["current","a. 当前的"],["shift","v. 转变；改变"],["encourage","v. 鼓励；激励"],["associate","v. 关联；联合"],["unfortunately","adv. 不幸地"],["participant","n. 参与者"],["rid","v. 摆脱；除去"],["invest","v. 投资；投入"],["puzzle","n. 难题；谜题"],["spot","v. 发现；认出"],["fundamental","a. 基本的"],["impatient","a. 不耐烦的"],["deal","v. 处理；交易"],["ensure","v. 确保；保证"],["expert","n. 专家；行家"],["financial","a. 财务的"],["difference","n. 差异；不同"],["exist","v. 存在；生存"],["approve","v. 批准；同意"],["supplement","n. 补充；增补"],["distinct","a. 明显的"],["merchant","n. 商人"],["amateur","n. 业余爱好者"],["greedy","a. 贪婪的"],["authority","n. 权威；当局"],["acquaintance","n. 熟人；了解"],["personnel","n. 人员；职员"],["retire","v. 退休"],["worthy","a. 值得的"],["fame","n. 名声"],["educational","a. 教育的"],["difficulty","n. 困难"],["qualify","v. 胜任；合格"],["publish","v. 发布；出版"],["relationship","n. 关系；联系"],["elegant","a. 优雅的"],["confirm","v. 证实；确认"],
+    // DAY 4
+    ["website","n. 网站"],["presumably","adv. 大概；假设"],["melt","v. (使)融化"],["tackle","v. 处理；用具"],["rational","a. 理性的"],["concentrate","v. 集中；专心"],["trap","v. 陷阱；捕捉"],["accuse","v. 控告；指控"],["formal","a. 正式的"],["protective","a. 保护的"],["crude","a. 粗糙的"],["scenery","n. 风景；景色"],["vivid","a. 生动的；鲜艳的"],["genius","n. 天才；才智"],["neglect","v. 忽视；忽略"],["temporary","a. 临时的"],["withdraw","v. 撤回；退回"],["extension","n. 延长；扩展"],["property","n. 财产；属性"],["aggressive","a. 侵略的"],["mild","a. 温和的"],["accord","v. 使一致；符合"],["shrink","v. 收缩；缩水"],["grief","n. 悲伤；痛苦"],["export","v. 出口；输出"],["controversial","a. 有争议的"],["appearance","n. 外貌；出现"],["assure","v. 保证；使确信"],["stem","v. 阻止；源于"],["commitment","n. 承诺；投入"],["scheme","n. 计划；方案"],["global","a. 全球的"],["expense","n. 花费；开支"],["regardless","adv. 不管怎样"],["interference","n. 干涉；干扰"],["plague","n. 瘟疫；灾难"],["rescue","v. 救援；解救"],["executive","a. 执行的"],["negotiate","v. 协商；谈判"],["commodity","n. 商品"],["straightforward","a. 直率的"],["abrupt","a. 突然的"],["odd","a. 奇怪的"],["recruit","v. 招募；吸收"],["illustrate","v. 说明；阐明"],["readily","adv. 容易地"],["virtue","n. 美德；优点"],["resume","v. 重新开始"],["summarize","v. 总结"],["workshop","n. 车间；研讨会"],
+    // DAY 5
+    ["welfare","n. 福利"],["plot","n. 情节；阴谋"],["agency","n. 代理机构"],["decrease","v. 减少"],["expose","v. 暴露；揭露"],["device","n. 装置；策略"],["survival","n. 幸存(者)"],["witness","n. 目击者"],["commercial","a. 商业的"],["selection","n. 选择；挑选"],["appliance","n. 应用"],["target","n. 目标；靶子"],["appropriate","a. 合适的"],["sheer","a. 纯粹的"],["network","n. 网络"],["persuasion","n. 说服"],["revolutionary","a. 革命的"],["replace","v. 替换；取代"],["pace","n. 步伐；速度"],["update","v. 更新"],["complicated","a. 复杂的"],["extensive","a. 广泛的"],["disguise","v. 假扮；掩饰"],["accent","n. 口音；重音"],["senior","a. 高级的；年长的"],["consultant","n. 顾问"],["cruise","n. 游船；巡航"],["collective","a. 集体的"],["profit","n. 利润；收益"],["financial","a. 财务的"],["breed","v. 繁殖；培养"],["prominent","a. 突出的"],["shelter","n. 庇护所"],["divorce","n. 离婚"],["violence","n. 暴力"],["depression","n. 抑郁；萧条"],["violate","v. 违反；侵犯"],["annual","a. 每年的"],["delivery","n. 交付；传递"],["entertain","v. 娱乐；款待"],["urgent","a. 紧急的"],["logic","n. 逻辑"],["flash","n. 闪光；闪现"],["blend","v. 混合；融合"],["circular","a. 圆形的"],["gloomy","a. 阴暗的"],["merge","v. 出现；浮现"],["advanced","a. 高级的"],["civil","a. 民事的；文明的"],["recreation","n. 娱乐；消遣"],
+    // DAY 6
+    ["luxury","n. 奢侈；奢华"],["image","n. 形象；影像"],["medium","n. 媒介；工具"],["abuse","v. 滥用；虐待"],["justice","n. 公正；司法"],["competent","a. 有能力的"],["inner","a. 内部的"],["injury","n. 伤害；损伤"],["impress","v. 留下深刻印象"],["vehicle","n. 车辆；工具"],["channel","n. 渠道；频道"],["cultivate","v. 培养；耕作"],["rob","v. 抢劫；盗取"],["pension","n. 养老金"],["explicit","a. 明确的"],["wander","v. 漫游；徘徊"],["enable","v. 使能够"],["strip","v. 脱去；剥夺"],["married","a. 已婚的"],["locate","v. 定位；找到"],["bankrupt","a. 破产的"],["lease","n. 租赁；租约"],["greenhouse","n. 温室"],["secure","a. 安全的"],["historic","a. 历史上著名的"],["twist","v. 使缠绕"],["balcony","n. 阳台"],["tragic","a. 悲惨的"],["occasion","n. 时刻；场合"],["tedious","a. 乏味的"],["cling","v. 粘着；坚持"],["similar","a. 类似的"],["debate","n. 争论；辩论"],["state","n. 州；国家"],["tradition","n. 传统"],["wonder","v. 想知道"],["mostly","adv. 大部分"],["suggest","v. 表明；建议"],["derive","v. 来自；起源于"],["average","adj. 普通的"],["personality","n. 性格；人格"],["item","n. 条款；项目"],["trade","n. 贸易；生意"],["achieve","v. 达到；成功"],["cause","n. 原因"],["opportunity","n. 机会"],["attach","v. 附上；重视"],["ability","n. 能力"],["impact","n. 影响"],["environment","n. 环境"],
+    // DAY 7
+    ["facility","n. 设施；才能"],["powerful","adj. 有权力的"],["disorder","n. 混乱；失调"],["edit","vt. 编辑"],["participate","vi. 参加"],["shortly","adv. 立刻"],["graduate","n. 毕业生"],["grasp","vt. 抓紧；理解"],["stain","v. 沾污，染色"],["privacy","n. 隐私"],["account","n. 账户"],["damage","v. 损害"],["avoid","v. 避免；回避"],["engage","v. 吸引；雇用"],["require","v. 需要；要求"],["resource","n. 资源"],["contract","n. 合同"],["stability","n. 稳定性"],["confuse","vt. 使困惑"],["overlook","vt. 忽略"],["weird","adj. 古怪的"],["trail","n. 踪迹"],["injure","vt. 伤害"],["elect","v. 选举"],["talent","n. 才能"],["reap","vt. 收割；获得"],["laboratory","n. 实验室"],["recycle","v. 回收利用"],["conscious","adj. 意识到的"],["represent","vt. 象征"],["suggestion","n. 建议"],["suicide","n. 自杀"],["strengthen","vt. 加强"],["ambassador","n. 大使"],["arrange","v. 安排"],["classic","n. 经典作品"],["imaginary","adj. 想象中的"],["inflation","n. 通货膨胀"],["useless","adj. 无用的"],["athlete","n. 运动员"],["instinct","n. 本能"],["passport","n. 护照"],["instruct","vt. 指示；教育"],["arrangement","n. 安排"],["circuit","n. 电路"],["industrial","adj. 工业的"],["transport","vt. 运输"],["dilemma","n. 困境"],["intensive","adj. 加强的"],["affection","n. 喜爱"],
+    // DAY 8
+    ["steady","adj. 平稳的"],["dramatic","adj. 激动人心的"],["being","n. 人；存在"],["award","vt. 授予"],["obtain","vt. 获得"],["commence","v. 开始"],["commerce","n. 商业"],["instrument","n. 工具"],["sufficient","adj. 足够的"],["generally","ad. 通常"],["comparative","adj. 比较的"],["accompany","vt. 陪伴"],["seal","n. 封条"],["aware","a. 意识到的"],["thirst","n. 渴；渴望"],["salary","n. 薪金"],["fund","n. 基金"],["politician","n. 政治家"],["border","n. 边缘"],["trend","n. 趋势"],["bind","vt. 捆绑"],["compensate","vt. 补偿"],["sustain","vt. 保持"],["output","n. 产量"],["polish","vt. 磨光"],["medical","adj. 医学的"],["manage","v. 管理"],["apply","v. 应用"],["highlight","vt. 突出"],["faculty","n. 能力；学院"],["symbol","n. 符号"],["reception","n. 招待会"],["vain","a. 徒劳的"],["competition","n. 竞争"],["passion","n. 激情"],["structure","n. 结构"],["consistent","a. 坚持的"],["addition","n. 加法"],["enrich","vt. 充实"],["institute","n. 机构"],["shield","n. 防护物"],["primary","a. 首要的"],["reverse","v. 倒转"],["means","n. 方法"],["invent","vt. 发明"],["expense","n. 花费"],["accumulate","v. 积累"],["corresponding","adj. 相应的"],["development","n. 发展"],["engineering","n. 工程"],
+    // DAY 9
+    ["various","adj. 各种各样的"],["indeed","adv. 真正地"],["controversy","n. 争议"],["estimate","v. 估计"],["latter","adj. 后者的"],["election","n. 选举"],["concrete","adj. 具体的"],["release","v. 释放"],["series","n. 系列"],["crisis","n. 危机"],["determine","v. 确定"],["anxiety","n. 焦虑"],["positive","adj. 积极的"],["measure","n. 措施"],["efficient","adj. 高效的"],["encounter","v. 遇到"],["display","v. 展示"],["ancient","adj. 古老的"],["practically","adv. 实际上"],["alter","v. 改变"],["include","v. 包括"],["beyond","prep. 超出"],["reveal","v. 揭示"],["decorate","v. 装饰"],["permanent","adj. 永久的"],["bet","v. 打赌"],["association","n. 协会"],["guarantee","n. 保修单"],["contain","v. 包含"],["cite","v. 引用"],["victim","n. 牺牲品"],["background","n. 背景"],["submit","v. 屈服；提交"],["cultural","adj. 文化的"],["personally","adv. 亲自"],["appoint","vt. 任命"],["sorrow","n. 悲伤"],["anonymous","adj. 匿名的"],["routine","n. 例行公事"],["process","n. 过程"],["suite","n. 套间"],["rude","adj. 粗鲁的"],["former","adj. 以前的"],["thrive","v. 兴旺"],["annoy","v. 使烦恼"],["assume","vt. 假定"],["assist","v. 帮助"],["acute","a. 敏锐的"],["curb","vt. 控制"],["substantial","a. 大量的"],
+    // DAY 10
+    ["fantastic","a. 极好的"],["theft","n. 偷窃"],["collapse","vi. 倒塌"],["desirable","a. 称心如意的"],["minor","a. 次要的"],["diet","n. 饮食"],["additional","a. 额外的"],["hunt","n. 追踪"],["tender","a. 柔弱的"],["alike","a. 同样的"],["magic","n. 魔术"],["objective","n. 目标"],["debt","n. 负债"],["restore","vt. 恢复"],["extra","a. 额外的"],["prohibit","vt. 禁止"],["subtle","a. 微妙的"],["client","n. 委托人"],["commit","v. 犯；忠于"],["offence","n. 犯罪"],["advisable","a. 可取的"],["gradual","a. 逐渐的"],["occupation","n. 职业"],["apparent","a. 显然的"],["attain","vt. 达到"],["safeguard","vt. 保护"],["category","n. 种类"],["publicity","n. 宣传"],["optimistic","a. 乐观的"],["fry","vt. 油炸"],["festival","n. 节日"],["option","n. 选择权"],["overtake","vt. 超过"],["convention","n. 习俗"],["colleague","n. 同事"],["compare","v. 比较"],["parade","n. 游行"],["struggle","v. 奋斗"],["smartphone","n. 智能手机"],["offend","vt. 冒犯"],["confidential","a. 秘密的"],["leak","v. 泄漏"],["fraud","n. 欺诈"],["define","vt. 限定"],["bid","n. 努力；投标"],["haste","n. 急速"],["minority","n. 少数"],["nevertheless","ad. 尽管"],["sightseeing","n. 观光"],["originate","vi. 起源于"],
+    // DAY 11
+    ["willing","adj. 乐意的"],["finding","n. 发现"],["living","adj. 活着的"],["researcher","n. 研究员"],["supply","v. 提供"],["affect","v. 影响"],["condition","n. 条件"],["refer","v. 提到"],["involve","v. 涉及"],["security","n. 安全"],["emphasis","n. 强调"],["quality","n. 质量"],["professor","n. 教授"],["pay","v. 支付"],["author","n. 作者"],["issue","n. 问题"],["honest","adj. 诚实的"],["recognize","v. 认证"],["settle","v. 解决"],["contribute","v. 贡献"],["expectation","n. 期待"],["trouble","n. 问题"],["disaster","n. 灾难"],["threat","n. 威胁"],["remote","adj. 遥远的"],["belief","n. 信仰"],["possibility","n. 可能"],["maintain","v. 维持"],["advantage","n. 有利条件"],["transform","v. 改变"],["absence","n. 缺乏"],["sensitive","adj. 敏感的"],["cope","v. 处理"],["claim","v. 宣称"],["despite","prep. 尽管"],["institution","n. 机构"],["ultimately","adv. 最终"],["project","n. 项目"],["scientific","adj. 科学的"],["self","n. 自身"],["decade","n. 十年"],["priority","n. 优先"],["technology","n. 技术"],["request","n. 要求"],["gather","v. 收集"],["establish","v. 建立"],["entire","adj. 全部的"],["desire","n. 渴望"],["indicate","v. 表明"],
+    // DAY 12
+    ["focus","v. 集中"],["disappointing","adj. 令人失望的"],["journal","n. 报纸"],["attack","n. 攻击"],["considerable","adj. 相当大的"],["record","n. 记录"],["economic","adj. 经济学的"],["proposal","n. 提议"],["connection","n. 关系"],["pressure","n. 压力"],["detail","n. 详情"],["peer","n. 同辈"],["industry","n. 行业"],["regular","adj. 有规律的"],["agent","n. 代理人"],["severe","adj. 严厉的"],["adopt","v. 采用"],["solution","n. 解决办法"],["context","n. 上下文"],["prevent","v. 阻止"],["assess","v. 评估"],["negative","adj. 负面的"],["suppose","v. 推断"],["promote","v. 促进"],["organization","n. 组织"],["definitely","adv. 肯定地"],["merely","adv. 只是"],["household","n. 家庭"],["extreme","adj. 极度的"],["obesity","n. 肥胖症"],["express","v. 表示"],["producer","n. 制片人"],["strategy","n. 策略"],["explore","v. 探险"],["adult","n. 成人"],["suffer","v. 遭受"],["emotion","n. 情感"],["relate","v. 涉及"],["application","n. 申请"],["behave","v. 表现"],["examine","v. 审查"],["enormous","adj. 巨大的"],["drug","n. 药物"],["essay","n. 文章"],["generate","v. 产生"],["attract","v. 吸引"],["credit","n. 信用"],["vary","v. 不同"],["technology","n. 技术"]
+];
+
+// 转换格式适配逻辑 {w, m}
+const DB = RAW_DATA.map(item => ({ w: item[0], m: item[1] }));
+
+// ================= 核心逻辑 =================
+let queue = [];
+let streakCount = 0;
+let lastResult = null;
+let currentItem = null;
+let canClick = true;
+
+// 洗牌
+function shuffle(arr) {
+    let array = [...arr];
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+function init() {
+    queue = shuffle(DB);
+    nextCard();
+}
+
+function nextCard() {
+    showReviewBanner();
+    
+    // 无限循环逻辑：永远取第0个，处理完后塞回队列不同位置
+    currentItem = queue[0];
+    
+    document.getElementById('q-word').innerText = currentItem.w;
+    
+    // 生成选项
+    const others = shuffle(DB.filter(x => x.w !== currentItem.w)).slice(0, 3);
+    const options = shuffle([currentItem, ...others]);
+    
+    const box = document.getElementById('opt-box');
+    box.innerHTML = '';
+    canClick = true;
+    
+    options.forEach(opt => {
+        const btn = document.createElement('div');
+        btn.className = 'btn';
+        btn.innerText = opt.m;
+        btn.onclick = () => handleChoice(btn, opt);
+        box.appendChild(btn);
+    });
+}
+
+function handleChoice(btn, selected) {
+    if (!canClick) return;
+    canClick = false;
+    
+    const isCorrect = (selected.w === currentItem.w);
+    const allBtns = document.querySelectorAll('.btn');
+    
+    // 记录上一题结果
+    lastResult = { w: currentItem.w, m: currentItem.m, ok: isCorrect };
+    
+    if (isCorrect) {
+        // === 答对 ===
+        streakCount++;
+        document.getElementById('streak').innerText = streakCount;
+        btn.classList.add('btn-ok');
         
-        let queue = [];
-        let currentItem = null;
-        let lastResult = null; // 记录上一次的结果 { word: "", mean: "", isCorrect: true/false }
+        // 算法：移出头部，放入尾部 (600词后循环)
+        queue.shift();
+        queue.push(currentItem);
+        
+        setTimeout(nextCard, 200); // 极速切换
+    } else {
+        // === 答错 ===
+        streakCount = 0;
+        document.getElementById('streak').innerText = streakCount;
+        btn.classList.add('btn-err');
+        
+        // 高亮正确项
+        allBtns.forEach(b => {
+            if (b.innerText === currentItem.m) b.classList.add('btn-ok');
+        });
+        
+        // 算法：移出头部，插入到第 3-6 位之间 (短期复习)
+        queue.shift();
+        const insertIdx = Math.min(queue.length, Math.floor(Math.random() * 4) + 3);
+        queue.splice(insertIdx, 0, currentItem);
+        
+        setTimeout(nextCard, 1500); // 惩罚停顿
+    }
+}
 
-        // 洗牌算法
-        function shuffle(arr) {
-            return arr.sort(() => Math.random() - 0.5);
-        }
+function showReviewBanner() {
+    if (!lastResult) return;
+    const banner = document.getElementById('review-banner');
+    const icon = lastResult.ok ? "✅" : "❌";
+    
+    banner.className = lastResult.ok ? 'banner-ok' : 'banner-err';
+    banner.innerText = `${icon} ${lastResult.w} : ${lastResult.m}`;
+    banner.style.transform = 'translateY(0)';
+    
+    setTimeout(() => {
+        banner.style.transform = 'translateY(-100%)';
+    }, 2500);
+}
 
-        // 初始化
-        function init() {
-            // 深拷贝并打乱
-            queue = shuffle([...fullDatabase]);
-            renderQuestion();
-        }
+// 启动
+init();
 
-        // 渲染题目
-        function renderQuestion() {
-            // 1. 显示上一次的结果（如果有）
-            showReviewBar();
-
-            // 2. 检查队列
-            if (queue.length === 0) {
-                alert("太棒了！本轮单词已全部刷完！将重新开始。");
-                init();
-                return;
-            }
-
-            // 3. 取词
-            currentItem = queue[0]; // 永远取第一个，答错的会插队，答对的移除
-
-            document.getElementById('word').innerText = currentItem.w;
-            document.getElementById('hint').innerText = "请选择正确释义";
-            
-            // 4. 生成选项
-            const options = generateOptions(currentItem);
-            const optionsBox = document.getElementById('options');
-            optionsBox.innerHTML = ''; // 清空
-            optionsBox.classList.remove('disabled-click'); // 允许点击
-
-            options.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'option-btn';
-                btn.innerText = opt.m;
-                btn.onclick = () => handleChoice(btn, opt);
-                optionsBox.appendChild(btn);
-            });
-        }
-
-        // 生成干扰项
-        function generateOptions(correct) {
-            let others = fullDatabase.filter(i => i.w !== correct.w);
-            let distractors = shuffle(others).slice(0, 3);
-            return shuffle([correct, ...distractors]);
-        }
-
-        // 处理点击
-        function handleChoice(btn, selected) {
-            const optionsBox = document.getElementById('options');
-            optionsBox.classList.add('disabled-click'); // 锁住，防止连点
-
-            const isCorrect = (selected.w === currentItem.w);
-
-            // 记录结果供下一屏回顾显示
-            lastResult = {
-                word: currentItem.w,
-                mean: currentItem.m,
-                isCorrect: isCorrect
-            };
-
-            // 视觉反馈 & 队列逻辑
-            if (isCorrect) {
-                // === 答对逻辑 ===
-                btn.classList.add('btn-correct');
-                
-                // 算法：移除该词 (或者你可以改成放到队尾 queue.push(queue.shift()))
-                queue.shift(); 
-
-                // 极速跳转：300ms
-                setTimeout(renderQuestion, 300); 
-
-            } else {
-                // === 答错逻辑 ===
-                btn.classList.add('btn-wrong');
-                
-                // 找出正确的那个标绿，让用户死得明白
-                const allBtns = document.querySelectorAll('.option-btn');
-                allBtns.forEach(b => {
-                    if (b.innerText === currentItem.m) b.classList.add('btn-correct');
-                });
-
-                // 算法：错误惩罚 -> 插入到第 3~5 位之间
-                queue.shift(); // 先拿出来
-                const insertIndex = Math.min(queue.length, Math.floor(Math.random() * 3) + 2);
-                queue.splice(insertIndex, 0, currentItem); // 插回去，一会见
-
-                // 惩罚时间：1500ms (强迫看清正确答案)
-                setTimeout(renderQuestion, 1500);
-            }
-        }
-
-        // 顶部回顾条逻辑
-        function showReviewBar() {
-            if (!lastResult) return;
-
-            const bar = document.getElementById('review-bar');
-            
-            // 设置内容
-            const icon = lastResult.isCorrect ? "✅" : "❌";
-            bar.innerText = `${icon} ${lastResult.word} : ${lastResult.mean}`;
-            
-            // 设置颜色
-            bar.className = lastResult.isCorrect ? 'review-correct' : 'review-wrong';
-            
-            // 动画：滑下来
-            bar.style.transform = 'translateY(0)';
-
-            // 3秒后自动收起
-            setTimeout(() => {
-                bar.style.transform = 'translateY(-100%)';
-            }, 3000);
-        }
-
-        // 启动
-        init();
-
-    </script>
+</script>
 </body>
 </html>
