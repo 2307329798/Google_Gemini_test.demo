@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>极速刷词</title>
+    <style>
+        :root {
+            --primary: #07c160;
+            --wrong: #fa5151;
+            --bg: #f5f7fa;
+            --card-bg: #ffffff;
+            --text: #333;
+        }
+        body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 顶部回顾通知栏 */
+        #review-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            transform: translateY(-100%);
+            transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .review-correct { background-color: #d1f7de; color: #006622; }
+        .review-wrong { background-color: #ffe6e6; color: #a80000; }
+
+        /* 主区域 */
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 20px;
+            padding-top: 60px; /* 给通知栏留空间 */
+        }
+
+        .word-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 50px 20px;
+            text-align: center;
+            margin-bottom: 40px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+            transition: transform 0.2s;
+        }
+
+        .word-text {
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 5px;
+        }
+        
+        .phonetic {
+            color: #888;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        /* 选项布局 */
+        .options-box {
+            display: grid;
+            gap: 15px;
+        }
+
+        .option-btn {
+            background: #fff;
+            border: none;
+            padding: 20px;
+            font-size: 17px;
+            color: #444;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            transition: all 0.1s;
+            text-align: left;
+            position: relative;
+            font-weight: 500;
+        }
+
+        .option-btn:active { background: #f0f0f0; transform: scale(0.98); }
+
+        /* 状态样式 */
+        .btn-correct {
+            background: #07c160 !important;
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(7, 193, 96, 0.4);
+        }
+        .btn-wrong {
+            background: #fa5151 !important;
+            color: white !important;
+            animation: shake 0.4s;
+        }
+        
+        /* 禁用点击，防止切题时狂点 */
+        .disabled-click { pointer-events: none; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            60% { transform: translateX(8px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部回顾条 -->
+    <div id="review-bar"></div>
+
+    <div class="container">
+        <div class="word-card">
+            <div class="word-text" id="word">Ready?</div>
+            <div class="phonetic" id="hint">点击下方选项开始</div>
+        </div>
+
+        <div class="options-box" id="options">
+            <!-- 选项将在这里生成 -->
+        </div>
+    </div>
+
+    <script>
+        // ================= 数据区 =================
+        // 依然是你的Day1部分数据，你可以继续填充
+        const fullDatabase = [
+            { w: "mature", m: "成熟的；深思熟虑的" },
+            { w: "supreme", m: "至高无上的" },
+            { w: "likely", m: "可能的" },
+            { w: "interaction", m: "互动；交互" },
+            { w: "construction", m: "建设；建造" },
+            { w: "previous", m: "以前的；先前的" },
+            { w: "material", m: "材料；物质" },
+            { w: "gym", m: "健身房" },
+            { w: "responsible", m: "负责的" },
+            { w: "rare", m: "稀有的；罕见的" },
+            { w: "contact", m: "接触；联系" },
+            { w: "tend", m: "倾向于；易于" },
+            { w: "current", m: "当前的；流行的" },
+            { w: "individual", m: "个人；个体" },
+            { w: "factor", m: "因素" },
+            { w: "action", m: "行动；行为" },
+            { w: "access", m: "访问；通道" },
+            { w: "career", m: "职业；生涯" },
+            { w: "offer", m: "提供；提议" },
+            { w: "budget", m: "预算" }
+        ];
+
+        // ================= 逻辑区 =================
+        
+        let queue = [];
+        let currentItem = null;
+        let lastResult = null; // 记录上一次的结果 { word: "", mean: "", isCorrect: true/false }
+
+        // 洗牌算法
+        function shuffle(arr) {
+            return arr.sort(() => Math.random() - 0.5);
+        }
+
+        // 初始化
+        function init() {
+            // 深拷贝并打乱
+            queue = shuffle([...fullDatabase]);
+            renderQuestion();
+        }
+
+        // 渲染题目
+        function renderQuestion() {
+            // 1. 显示上一次的结果（如果有）
+            showReviewBar();
+
+            // 2. 检查队列
+            if (queue.length === 0) {
+                alert("太棒了！本轮单词已全部刷完！将重新开始。");
+                init();
+                return;
+            }
+
+            // 3. 取词
+            currentItem = queue[0]; // 永远取第一个，答错的会插队，答对的移除
+
+            document.getElementById('word').innerText = currentItem.w;
+            document.getElementById('hint').innerText = "请选择正确释义";
+            
+            // 4. 生成选项
+            const options = generateOptions(currentItem);
+            const optionsBox = document.getElementById('options');
+            optionsBox.innerHTML = ''; // 清空
+            optionsBox.classList.remove('disabled-click'); // 允许点击
+
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerText = opt.m;
+                btn.onclick = () => handleChoice(btn, opt);
+                optionsBox.appendChild(btn);
+            });
+        }
+
+        // 生成干扰项
+        function generateOptions(correct) {
+            let others = fullDatabase.filter(i => i.w !== correct.w);
+            let distractors = shuffle(others).slice(0, 3);
+            return shuffle([correct, ...distractors]);
+        }
+
+        // 处理点击
+        function handleChoice(btn, selected) {
+            const optionsBox = document.getElementById('options');
+            optionsBox.classList.add('disabled-click'); // 锁住，防止连点
+
+            const isCorrect = (selected.w === currentItem.w);
+
+            // 记录结果供下一屏回顾显示
+            lastResult = {
+                word: currentItem.w,
+                mean: currentItem.m,
+                isCorrect: isCorrect
+            };
+
+            // 视觉反馈 & 队列逻辑
+            if (isCorrect) {
+                // === 答对逻辑 ===
+                btn.classList.add('btn-correct');
+                
+                // 算法：移除该词 (或者你可以改成放到队尾 queue.push(queue.shift()))
+                queue.shift(); 
+
+                // 极速跳转：300ms
+                setTimeout(renderQuestion, 300); 
+
+            } else {
+                // === 答错逻辑 ===
+                btn.classList.add('btn-wrong');
+                
+                // 找出正确的那个标绿，让用户死得明白
+                const allBtns = document.querySelectorAll('.option-btn');
+                allBtns.forEach(b => {
+                    if (b.innerText === currentItem.m) b.classList.add('btn-correct');
+                });
+
+                // 算法：错误惩罚 -> 插入到第 3~5 位之间
+                queue.shift(); // 先拿出来
+                const insertIndex = Math.min(queue.length, Math.floor(Math.random() * 3) + 2);
+                queue.splice(insertIndex, 0, currentItem); // 插回去，一会见
+
+                // 惩罚时间：1500ms (强迫看清正确答案)
+                setTimeout(renderQuestion, 1500);
+            }
+        }
+
+        // 顶部回顾条逻辑
+        function showReviewBar() {
+            if (!lastResult) return;
+
+            const bar = document.getElementById('review-bar');
+            
+            // 设置内容
+            const icon = lastResult.isCorrect ? "✅" : "❌";
+            bar.innerText = `${icon} ${lastResult.word} : ${lastResult.mean}`;
+            
+            // 设置颜色
+            bar.className = lastResult.isCorrect ? 'review-correct' : 'review-wrong';
+            
+            // 动画：滑下来
+            bar.style.transform = 'translateY(0)';
+
+            // 3秒后自动收起
+            setTimeout(() => {
+                bar.style.transform = 'translateY(-100%)';
+            }, 3000);
+        }
+
+        // 启动
+        init();
+
+    </script>
+</body>
+</html>
